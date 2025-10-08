@@ -18,7 +18,7 @@ def generate_launch_description():
     map_dir = LaunchConfiguration(
         "map",
         default=os.path.join(
-            get_package_share_directory("robot_navigation"), "maps", "warehouse_navigation.yaml"
+            get_package_share_directory("robot_navigation"), "maps", "warehouse_with_tiago.yaml"
         ),
     )
 
