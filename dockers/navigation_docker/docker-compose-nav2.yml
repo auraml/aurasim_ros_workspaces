@@ -1,12 +1,13 @@
-name: nav2_scenario
 services:
   nav2_scenario:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: dockers/navigation_docker/Dockerfile
+      args:
+        PACKAGES: ${PACKAGES:-robot_navigation topic_based_ros2_control tiago_pro_robot}
     container_name: nav2_scenario
     network_mode: host
-    working_dir: /root/nav2_ws
+    working_dir: /root/humble_ws
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1

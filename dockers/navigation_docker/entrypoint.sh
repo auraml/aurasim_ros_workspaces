@@ -3,7 +3,7 @@ set -e
 
 # Source ROS2 and workspace
 source /opt/ros/humble/setup.bash
-source /root/nav2_ws/install/setup.bash
+source /root/humble_ws/install/setup.bash
 
 # Set FastDDS config
 export FASTRTPS_DEFAULT_PROFILES_FILE=/root/.ros/fastdds.xml
@@ -27,7 +27,7 @@ echo "Starting navigation..."
 echo "================================================"
 
 # Start navigation in background
-ros2 launch robot_navigation navigation.launch.py &
+ros2 launch robot_navigation tiago_navigation.launch.py &
 NAV_PID=$!
 
 echo "================================================"
