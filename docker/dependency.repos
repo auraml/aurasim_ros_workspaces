@@ -1,0 +1,16 @@
+repositories:
+  # Unmodified PAL Robotics repositories - pinned to specific commits
+  pal_sea_arm:
+    type: git
+    url: https://github.com/pal-robotics/pal_sea_arm.git
+    version: 6f7e31a  # humble-devel, 1.21.0
+
+  pal_pro_gripper:
+    type: git
+    url: https://github.com/pal-robotics/pal_pro_gripper.git
+    version: 87efd03  # humble-devel, 1.10.0
+
+  pal_urdf_utils:
+    type: git
+    url: https://github.com/pal-robotics/pal_urdf_utils.git
+    version: b0a43ee  # humble-devel, 2.3.4

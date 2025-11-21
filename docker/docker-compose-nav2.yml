@@ -1,0 +1,27 @@
+name: nav2_scenario
+services:
+  nav2_scenario:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nav2_scenario
+    network_mode: host
+    working_dir: /root/nav2_ws
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - QT_QPA_PLATFORM=xcb
+      - XAUTHORITY=/tmp/.docker.xauth
+      - ROS_DISABLE_SHARED_MEMORY=1
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/root/.ros/fastdds.xml
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth
+      # FastDDS config for Isaac Sim - disables shared memory, uses only UDP
+      - ./fastdds.xml:/root/.ros/fastdds.xml:rw
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices: []
