@@ -1,0 +1,11 @@
+/**:
+  ros__parameters:
+    motions:
+      home:
+        joints: [torso_lift_joint]
+        times_from_start: [3.0]
+        positions: [0.15]
+        meta:
+          name: Home
+          usage: demo
+          description: 'Go home'

@@ -1,0 +1,90 @@
+/**/mobile_base_controller:
+  ros__parameters:
+    type: mecanum_drive_controller/MecanumDriveController
+
+    # Reference timeout - controller will reset reference after this time
+    reference_timeout: 0.5
+
+    # Use unstamped velocity commands
+    use_stamped_vel: false
+
+    # Wheel configuration
+    front_left_wheel_command_joint_name: wheel_front_left_joint
+    front_right_wheel_command_joint_name: wheel_front_right_joint
+    rear_left_wheel_command_joint_name: wheel_rear_left_joint
+    rear_right_wheel_command_joint_name: wheel_rear_right_joint
+
+    front_left_wheel_state_joint_name: wheel_front_left_joint
+    front_right_wheel_state_joint_name: wheel_front_right_joint
+    rear_left_wheel_state_joint_name: wheel_rear_left_joint
+    rear_right_wheel_state_joint_name: wheel_rear_right_joint
+
+    # Kinematics parameters
+    kinematics:
+      base_frame_offset:
+        x: 0.0
+        y: 0.0
+        theta: 0.0
+      wheels_radius: 0.0762
+      sum_of_robot_center_projection_on_X_Y_axis: 0.95915
+
+    # The params below were used in ROS1 but not yet in ROS2
+
+    publish_rate: 50.0
+    pose_covariance_diagonal : [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+    twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+
+    # Velocity commands timeout [s]
+    cmd_vel_timeout: 0.25
+
+    # Base frame_id
+    base_frame_id: base_footprint
+
+    # odom tf will be published by direct laser odometry
+    enable_odom_tf: false
+
+    # Odom frame_id
+    odom_frame_id: odom
+
+    # Publish limited velocity
+    publish_limited_velocity: true
+
+    # Velocity and acceleration limits
+    # Whenever a min_* is unspecified, default to -max_*
+    linear:
+      x:
+        has_velocity_limits    : true
+        max_velocity           :  1.0 # m/s
+        min_velocity           : -1.0 # m/s
+        has_acceleration_limits: true
+        max_acceleration       :  1.0 # m/s^2
+        min_acceleration       :  -1.0 # m/s^2
+        has_jerk_limits        : false
+        max_jerk               :  5.0 # m/s^3
+      y:
+        has_velocity_limits    : true
+        max_velocity           :  1.0 # m/s
+        min_velocity           : -1.0 # m/s
+        has_acceleration_limits: true
+        max_acceleration       :  1.0 # m/s^2
+        min_acceleration       :  -1.0 # m/s^2
+        has_jerk_limits        : false
+        max_jerk               :  5.0 # m/s^3
+    angular:
+      z:
+        has_velocity_limits    : true
+        max_velocity           : 2.09 # 120.0º reduce pendulum effect
+        has_acceleration_limits: true
+        max_acceleration       : 2.09 # 120.0º/s^2
+        min_acceleration       : -2.09 # 120.0º/s^2
+        has_jerk_limits        : false
+        max_jerk               : 10.47 # 600.0º/s^3
+    space:
+      xy:
+        max_velocity           : 0.7
+      xz:
+        max_velocity           : 0.5
+      yz:
+        max_velocity           : 0.5
+      xyz:
+        max_velocity           : 0.4
