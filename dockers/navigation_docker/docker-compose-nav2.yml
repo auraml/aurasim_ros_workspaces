@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: dockers/navigation_docker/Dockerfile
       args:
-        PACKAGES: ${PACKAGES:-robot_navigation topic_based_ros2_control tiago_pro_robot}
+        PACKAGES: ${PACKAGES}
     container_name: nav2_scenario
     network_mode: host
     working_dir: /root/humble_ws
