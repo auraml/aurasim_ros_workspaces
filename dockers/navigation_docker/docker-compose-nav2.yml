@@ -18,7 +18,5 @@ services:
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth
-      # FastDDS config for Isaac Sim - disables shared memory, uses only UDP
-      - ./fastdds.xml:/root/.ros/fastdds.xml:rw
     devices:
       - /dev/dri:/dev/dri

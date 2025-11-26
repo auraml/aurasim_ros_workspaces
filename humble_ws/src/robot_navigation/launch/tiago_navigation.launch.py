@@ -12,7 +12,7 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time", default="True")
     namespace = LaunchConfiguration("namespace", default="")
-    use_rviz = LaunchConfiguration("use_rviz", default="True")
+    use_rviz = LaunchConfiguration("use_rviz", default="False")
     use_namespace = LaunchConfiguration("use_namespace", default="False")
 
     map_dir = LaunchConfiguration(
@@ -49,7 +49,7 @@ def generate_launch_description():
                 "use_namespace", default_value="false", description="Whether to apply the namespace to launched nodes"
             ),
             DeclareLaunchArgument(
-                "use_rviz", default_value="true", description="Use Rviz for visualization"
+                "use_rviz", default_value="false", description="Use Rviz for visualization"
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(os.path.join(nav2_bringup_launch_dir, "rviz_launch.py")),

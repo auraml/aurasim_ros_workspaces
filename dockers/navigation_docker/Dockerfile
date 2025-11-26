@@ -43,6 +43,9 @@ RUN rm -rf build install log && \
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'source /root/humble_ws/install/setup.bash' >> /root/.bashrc
 
+# Copy FastDDS config
+COPY dockers/navigation_docker/fastdds.xml /root/.ros/fastdds.xml
+
 # Copy and setup entrypoint
 COPY dockers/navigation_docker/entrypoint.sh /root/entrypoint.sh
 RUN chmod +x /root/entrypoint.sh
