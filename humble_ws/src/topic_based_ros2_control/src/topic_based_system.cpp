@@ -425,27 +425,8 @@ hardware_interface::return_type TopicBasedSystem::write(const rclcpp::Time& /*ti
     joint_state.effort.push_back(has_effort ? joint_commands_[EFFORT_INTERFACE_INDEX][i] : 0.0);
   }
 
-  // Handle mimic joints
-  for (const auto& mimic_joint : mimic_joints_)
-  {
-    joint_state.name.push_back(mimic_joint.joint_name);
-
-    // Find the mimicked joint index in the message
-    size_t mimicked_idx = 0;
-    for (size_t idx = 0; idx < joint_state.name.size() - 1; idx++)
-    {
-      if (joint_state.name[idx] == mimic_joint.mimicked_joint_name)
-      {
-        mimicked_idx = idx;
-        break;
-      }
-    }
-
-    // Apply multiplier to all interfaces
-    joint_state.position.push_back(mimic_joint.multiplier * joint_state.position[mimicked_idx]);
-    joint_state.velocity.push_back(mimic_joint.multiplier * joint_state.velocity[mimicked_idx]);
-    joint_state.effort.push_back(mimic_joint.multiplier * joint_state.effort[mimicked_idx]);
-  }
+  // Note: Mimic joints are already included in info_.joints and handled above
+  // No need to add them separately as that would create duplicates
 
   if (rclcpp::ok() && joint_state.name.size() != 0)
   {

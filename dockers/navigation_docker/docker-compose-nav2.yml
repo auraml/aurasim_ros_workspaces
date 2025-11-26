@@ -22,7 +22,3 @@ services:
       - ./fastdds.xml:/root/.ros/fastdds.xml:rw
     devices:
       - /dev/dri:/dev/dri
-    deploy:
-      resources:
-        reservations:
-          devices: []

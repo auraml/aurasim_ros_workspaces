@@ -16,7 +16,6 @@ RUN apt-get update && \
     vcs import src < /tmp/dependency.repos
 
 # Copy only specific packages from humble_ws using a script
-RUN mkdir -p /root/humble_ws/src
 COPY humble_ws/src /tmp/humble_ws_src
 RUN for pkg in $PACKAGES; do \
       if [ -d "/tmp/humble_ws_src/$pkg" ]; then \

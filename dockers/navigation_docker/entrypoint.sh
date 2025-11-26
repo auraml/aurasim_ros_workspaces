@@ -20,7 +20,18 @@ CONTROL_PID=$!
 
 # Wait for controller_manager to be ready
 echo "Waiting for controller_manager to initialize..."
-sleep 10
+TIMEOUT=60
+ELAPSED=0
+while ! ros2 service list | grep -q "/controller_manager/list_controllers"; do
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo "ERROR: controller_manager service not available after ${TIMEOUT}s"
+    exit 1
+  fi
+  echo "Waiting for controller_manager service... (${ELAPSED}s/${TIMEOUT}s)"
+  sleep 1
+  ELAPSED=$((ELAPSED + 1))
+done
+echo "controller_manager is ready!"
 
 echo "================================================"
 echo "Starting navigation..."
