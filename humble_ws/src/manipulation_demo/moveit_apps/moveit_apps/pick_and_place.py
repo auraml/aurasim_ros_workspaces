@@ -5,7 +5,6 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from moveit_msgs.action import MoveGroup, ExecuteTrajectory
 from moveit_msgs.msg import (
-    MotionPlanRequest,
     Constraints,
     JointConstraint,
     PositionConstraint,
@@ -17,27 +16,40 @@ from moveit_msgs.srv import GetCartesianPath
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from shape_msgs.msg import SolidPrimitive
-from std_msgs.msg import Header
 import time
 
 
 class PickAndPlaceNode(Node):
+    # Planning parameters
+    ARM_GROUP = 'panda_arm'
+    GRIPPER_GROUP = 'hand'
+    END_EFFECTOR_LINK = 'panda_hand'
+    BASE_FRAME = 'panda_link0'
+
+    # Motion parameters
+    PLANNING_ATTEMPTS = 10
+    PLANNING_TIME = 5.0
+    VELOCITY_SCALING = 0.1
+    ACCELERATION_SCALING = 0.1
+
+    # Gripper positions
+    GRIPPER_OPEN = 0.035
+    GRIPPER_CLOSED = 0.015
+
+    # Home position joint values
+    HOME_JOINTS = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+
     def __init__(self):
         super().__init__('pick_and_place_node')
-
         self.get_logger().info('Initializing Pick and Place node...')
 
         # MoveGroup action client
-        self.move_group_client = ActionClient(
-            self,
-            MoveGroup,
-            '/move_action'
-        )
-
+        self.move_group_client = ActionClient(self, MoveGroup, '/move_action')
         self.get_logger().info('Waiting for MoveGroup action server...')
         self.move_group_client.wait_for_server()
         self.get_logger().info('Connected to MoveGroup action server!')
 
+        # Cartesian path service
         self.cartesian_path_client = self.create_client(
             GetCartesianPath,
             '/compute_cartesian_path'
@@ -46,6 +58,7 @@ class PickAndPlaceNode(Node):
         self.cartesian_path_client.wait_for_service()
         self.get_logger().info('Connected to Cartesian path service!')
 
+        # Execute trajectory action client
         self.execute_trajectory_client = ActionClient(
             self,
             ExecuteTrajectory,
@@ -55,6 +68,7 @@ class PickAndPlaceNode(Node):
         self.execute_trajectory_client.wait_for_server()
         self.get_logger().info('Connected to ExecuteTrajectory action server!')
 
+        # Subscribe to joint states
         self.joint_state_sub = self.create_subscription(
             JointState,
             '/joint_states',
@@ -67,6 +81,100 @@ class PickAndPlaceNode(Node):
         """Store current joint state"""
         self.current_joint_state = msg
 
+    def _execute_move_group_goal(self, goal_msg, goal_description="move"):
+        """
+        Common method to execute MoveGroup goal and wait for result
+        Returns True if successful, False otherwise
+        """
+        future = self.move_group_client.send_goal_async(goal_msg)
+        rclpy.spin_until_future_complete(self, future)
+
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error(f'{goal_description}: Goal rejected!')
+            return False
+
+        self.get_logger().info(f'{goal_description}: Goal accepted, waiting for result...')
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+
+        result = result_future.result().result
+        if result.error_code.val == 1:
+            self.get_logger().info(f'{goal_description}: Success!')
+            return True
+        else:
+            self.get_logger().error(f'{goal_description}: Failed with error code {result.error_code.val}')
+            return False
+
+    def _create_pose_goal(self, group_name, pose_stamped):
+        """Create a MoveGroup goal with pose target using constraints (Humble compatible)"""
+        goal_msg = MoveGroup.Goal()
+        goal_msg.request.group_name = group_name
+        goal_msg.request.num_planning_attempts = self.PLANNING_ATTEMPTS
+        goal_msg.request.allowed_planning_time = self.PLANNING_TIME
+        goal_msg.request.max_velocity_scaling_factor = self.VELOCITY_SCALING
+        goal_msg.request.max_acceleration_scaling_factor = self.ACCELERATION_SCALING
+
+        # Create position constraint
+        position_constraint = PositionConstraint()
+        position_constraint.header.frame_id = pose_stamped.header.frame_id
+        position_constraint.link_name = self.END_EFFECTOR_LINK
+
+        # Use sphere primitive for position tolerance
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.SPHERE
+        primitive.dimensions = [0.001]  # 1mm tolerance
+
+        bounding_volume = BoundingVolume()
+        bounding_volume.primitives = [primitive]
+        bounding_volume.primitive_poses = [pose_stamped.pose]
+        position_constraint.constraint_region = bounding_volume
+        position_constraint.weight = 1.0
+
+        # Create orientation constraint
+        orientation_constraint = OrientationConstraint()
+        orientation_constraint.header.frame_id = pose_stamped.header.frame_id
+        orientation_constraint.link_name = self.END_EFFECTOR_LINK
+        orientation_constraint.orientation = pose_stamped.pose.orientation
+        orientation_constraint.absolute_x_axis_tolerance = 0.1
+        orientation_constraint.absolute_y_axis_tolerance = 0.1
+        orientation_constraint.absolute_z_axis_tolerance = 0.1
+        orientation_constraint.weight = 1.0
+
+        # Combine constraints
+        constraints = Constraints()
+        constraints.position_constraints = [position_constraint]
+        constraints.orientation_constraints = [orientation_constraint]
+        goal_msg.request.goal_constraints = [constraints]
+        goal_msg.planning_options.plan_only = False
+
+        return goal_msg
+
+    def _create_joint_goal(self, group_name, joint_names, joint_positions):
+        """Create a MoveGroup goal with joint target"""
+        goal_msg = MoveGroup.Goal()
+        goal_msg.request.group_name = group_name
+        goal_msg.request.num_planning_attempts = self.PLANNING_ATTEMPTS
+        goal_msg.request.allowed_planning_time = self.PLANNING_TIME
+        goal_msg.request.max_velocity_scaling_factor = self.VELOCITY_SCALING
+        goal_msg.request.max_acceleration_scaling_factor = self.ACCELERATION_SCALING
+
+        joint_constraints = []
+        for name, pos in zip(joint_names, joint_positions):
+            constraint = JointConstraint()
+            constraint.joint_name = name
+            constraint.position = pos
+            constraint.tolerance_above = 0.001
+            constraint.tolerance_below = 0.001
+            constraint.weight = 1.0
+            joint_constraints.append(constraint)
+
+        constraints = Constraints()
+        constraints.joint_constraints = joint_constraints
+        goal_msg.request.goal_constraints = [constraints]
+        goal_msg.planning_options.plan_only = False
+        return goal_msg
+
     def move_to_pose(self, x, y, z, qx=0.0, qy=1.0, qz=0.0, qw=0.0, cartesian=False):
         """Move end effector to specified pose"""
         self.get_logger().info(f'Moving to pose: x={x}, y={y}, z={z}, cartesian={cartesian}')
@@ -74,70 +182,15 @@ class PickAndPlaceNode(Node):
         if cartesian:
             return self.move_cartesian(x, y, z, qx, qy, qz, qw)
 
-        goal_msg = MoveGroup.Goal()
-        goal_msg.request.group_name = 'panda_arm'
-        goal_msg.request.num_planning_attempts = 10
-        goal_msg.request.allowed_planning_time = 5.0
-        goal_msg.request.max_velocity_scaling_factor = 0.1
-        goal_msg.request.max_acceleration_scaling_factor = 0.1
+        # Create pose stamped
+        pose_stamped = PoseStamped()
+        pose_stamped.header.frame_id = self.BASE_FRAME
+        pose_stamped.pose.position = Point(x=x, y=y, z=z)
+        pose_stamped.pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
 
-        # Set pose constraint
-        pose_constraint = PositionConstraint()
-        pose_constraint.header.frame_id = 'panda_link0'
-        pose_constraint.link_name = 'panda_hand'
-
-        # Position constraint
-        primitive = SolidPrimitive()
-        primitive.type = SolidPrimitive.SPHERE
-        primitive.dimensions = [0.001]
-
-        pose = Pose()
-        pose.position = Point(x=x, y=y, z=z)
-        pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
-
-        bounding_volume = BoundingVolume()
-        bounding_volume.primitives = [primitive]
-        bounding_volume.primitive_poses = [pose]
-
-        pose_constraint.constraint_region = bounding_volume
-        pose_constraint.weight = 1.0
-
-        # Orientation constraint
-        orientation_constraint = OrientationConstraint()
-        orientation_constraint.header.frame_id = 'panda_link0'
-        orientation_constraint.link_name = 'panda_hand'
-        orientation_constraint.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
-        orientation_constraint.absolute_x_axis_tolerance = 0.1
-        orientation_constraint.absolute_y_axis_tolerance = 0.1
-        orientation_constraint.absolute_z_axis_tolerance = 0.1
-        orientation_constraint.weight = 1.0
-
-        constraints = Constraints()
-        constraints.position_constraints = [pose_constraint]
-        constraints.orientation_constraints = [orientation_constraint]
-
-        goal_msg.request.goal_constraints = [constraints]
-        goal_msg.planning_options.plan_only = False
-
-        future = self.move_group_client.send_goal_async(goal_msg)
-        rclpy.spin_until_future_complete(self, future)
-
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error('Goal rejected!')
-            return False
-
-        self.get_logger().info('Goal accepted, waiting for result...')
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-
-        result = result_future.result().result
-        if result.error_code.val == 1:
-            self.get_logger().info('Successfully moved to pose!')
-            return True
-        else:
-            self.get_logger().error(f'Motion failed with error code: {result.error_code.val}')
-            return False
+        # Create and execute goal
+        goal_msg = self._create_pose_goal(self.ARM_GROUP, pose_stamped)
+        return self._execute_move_group_goal(goal_msg, f"Move to [{x:.3f}, {y:.3f}, {z:.3f}]")
 
     def move_cartesian(self, x, y, z, qx, qy, qz, qw):
         """Move end effector along Cartesian path"""
@@ -199,166 +252,76 @@ class PickAndPlaceNode(Node):
         Move gripper to specified position
         position: 0.0 = closed, 0.035 = open
         """
-        state_name = 'close1' if position < 0.01 else ('open' if position > 0.03 else 'close2')
-        self.get_logger().info(f'Moving gripper to: {state_name} (position={position})')
+        state_name = 'closed' if position < 0.02 else 'open'
+        self.get_logger().info(f'Moving gripper: {state_name} (position={position})')
 
-        goal_msg = MoveGroup.Goal()
-        goal_msg.request.group_name = 'hand'
-        goal_msg.request.num_planning_attempts = 10
-        goal_msg.request.allowed_planning_time = 5.0
-        goal_msg.request.max_velocity_scaling_factor = 0.1
-        goal_msg.request.max_acceleration_scaling_factor = 0.1
+        joint_names = ['panda_finger_joint1', 'panda_finger_joint2']
+        joint_positions = [position, position]
 
-        # Set joint constraints for gripper
-        joint_constraint_1 = JointConstraint()
-        joint_constraint_1.joint_name = 'panda_finger_joint1'
-        joint_constraint_1.position = position
-        joint_constraint_1.tolerance_above = 0.001
-        joint_constraint_1.tolerance_below = 0.001
-        joint_constraint_1.weight = 1.0
+        goal_msg = self._create_joint_goal(self.GRIPPER_GROUP, joint_names, joint_positions)
+        return self._execute_move_group_goal(goal_msg, f"Gripper {state_name}")
 
-        joint_constraint_2 = JointConstraint()
-        joint_constraint_2.joint_name = 'panda_finger_joint2'
-        joint_constraint_2.position = position
-        joint_constraint_2.tolerance_above = 0.001
-        joint_constraint_2.tolerance_below = 0.001
-        joint_constraint_2.weight = 1.0
+    def open_gripper(self):
+        """Open gripper"""
+        return self.move_gripper(self.GRIPPER_OPEN)
 
-        constraints = Constraints()
-        constraints.joint_constraints = [joint_constraint_1, joint_constraint_2]
-
-        goal_msg.request.goal_constraints = [constraints]
-        goal_msg.planning_options.plan_only = False
-
-        future = self.move_group_client.send_goal_async(goal_msg)
-        rclpy.spin_until_future_complete(self, future)
-
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error('Gripper goal rejected!')
-            return False
-
-        self.get_logger().info('Gripper goal accepted, waiting for result...')
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-
-        result = result_future.result().result
-        if result.error_code.val == 1:
-            self.get_logger().info('Gripper moved successfully!')
-            return True
-        else:
-            self.get_logger().error(f'Gripper motion failed with error code: {result.error_code.val}')
-            return False
+    def close_gripper(self):
+        """Close gripper"""
+        return self.move_gripper(self.GRIPPER_CLOSED)
 
     def go_home(self):
         """Move to home (ready) position"""
         self.get_logger().info('Moving to home position...')
 
-        goal_msg = MoveGroup.Goal()
-        goal_msg.request.group_name = 'panda_arm'
-        goal_msg.request.num_planning_attempts = 10
-        goal_msg.request.allowed_planning_time = 5.0
-        goal_msg.request.max_velocity_scaling_factor = 0.1
-        goal_msg.request.max_acceleration_scaling_factor = 0.1
-
-        # Use "ready" named state
         joint_names = [f'panda_joint{i}' for i in range(1, 8)]
-        ready_positions = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+        goal_msg = self._create_joint_goal(self.ARM_GROUP, joint_names, self.HOME_JOINTS)
+        return self._execute_move_group_goal(goal_msg, "Move to home")
 
-        joint_constraints = []
-        for name, pos in zip(joint_names, ready_positions):
-            constraint = JointConstraint()
-            constraint.joint_name = name
-            constraint.position = pos
-            constraint.tolerance_above = 0.001
-            constraint.tolerance_below = 0.001
-            constraint.weight = 1.0
-            joint_constraints.append(constraint)
+    def execute_pick_and_place(self, pick_pos=(0.273, 0.433, 0.127),
+                                place_pos=(0.070, -0.649, 0.4),
+                                approach_height=0.2):
+        """
+        Execute complete pick and place sequence
 
-        constraints = Constraints()
-        constraints.joint_constraints = joint_constraints
-
-        goal_msg.request.goal_constraints = [constraints]
-        goal_msg.planning_options.plan_only = False
-
-        future = self.move_group_client.send_goal_async(goal_msg)
-        rclpy.spin_until_future_complete(self, future)
-
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error('Home goal rejected!')
-            return False
-
-        self.get_logger().info('Home goal accepted, waiting for result...')
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-
-        result = result_future.result().result
-        if result.error_code.val == 1:
-            self.get_logger().info('Successfully moved to home!')
-            return True
-        else:
-            self.get_logger().error(f'Home motion failed with error code: {result.error_code.val}')
-            return False
-
-    def execute_pick_and_place(self):
-        """Execute complete pick and place sequence"""
+        Args:
+            pick_pos: (x, y, z) tuple for pick location
+            place_pos: (x, y, z) tuple for place location
+            approach_height: z height for approach/retreat moves
+        """
         self.get_logger().info('=' * 50)
         self.get_logger().info('Starting Pick and Place sequence')
         self.get_logger().info('=' * 50)
 
-        self.get_logger().info('Step 1: Moving to pre-pick position...')
-        if not self.move_to_pose(x=0.273, y=0.433, z=0.2):
-            self.get_logger().error('Failed to move to pre-pick position')
-            return False
-        time.sleep(1.0)
+        # Define sequence steps
+        steps = [
+            ('Moving to pre-pick position',
+             lambda: self.move_to_pose(pick_pos[0], pick_pos[1], approach_height)),
 
-        self.get_logger().info('Step 2: Opening gripper...')
-        if not self.move_gripper(0.035):
-            self.get_logger().error('Failed to open gripper')
-            return False
-        time.sleep(1.0)
+            ('Opening gripper', self.open_gripper),
 
-        self.get_logger().info('Step 3: Moving down to grasp cube...')
-        if not self.move_to_pose(x=0.273, y=0.433, z=0.127, cartesian=True):
-            self.get_logger().error('Failed to move down')
-            return False
-        time.sleep(1.0)
+            ('Moving down to grasp object',
+             lambda: self.move_to_pose(*pick_pos, cartesian=True)),
 
-        self.get_logger().info('Step 4: Closing gripper...')
-        if not self.move_gripper(0.015):
-            self.get_logger().error('Failed to close gripper')
-            return False
-        time.sleep(1.0)
+            ('Closing gripper', self.close_gripper),
 
-        self.get_logger().info('Step 5: Lifting to pre-grasp height...')
-        if not self.move_to_pose(x=0.273, y=0.433, z=0.2, cartesian=True):
-            self.get_logger().error('Failed to lift to pre-grasp')
-            return False
-        time.sleep(1.0)
+            ('Lifting object',
+             lambda: self.move_to_pose(pick_pos[0], pick_pos[1], approach_height, cartesian=True)),
 
-        self.get_logger().info('Step 6: Lifting cube higher...')
-        if not self.move_to_pose(x=0.273, y=0.433, z=0.4):
-            self.get_logger().error('Failed to lift')
-            return False
-        time.sleep(1.0)
+            ('Moving to place position',
+             lambda: self.move_to_pose(*place_pos)),
 
-        self.get_logger().info('Step 7: Moving to drop position...')
-        if not self.move_to_pose(x=0.070, y=-0.649, z=0.4):
-            self.get_logger().error('Failed to move to drop position')
-            return False
-        time.sleep(1.0)
+            ('Releasing object', self.open_gripper),
 
-        self.get_logger().info('Step 8: Opening gripper (dropping cube)...')
-        if not self.move_gripper(0.035):
-            self.get_logger().error('Failed to open gripper')
-            return False
-        time.sleep(1.0)
+            ('Returning home', self.go_home),
+        ]
 
-        self.get_logger().info('Step 9: Returning home...')
-        if not self.go_home():
-            self.get_logger().error('Failed to go home')
-            return False
+        # Execute steps
+        for i, (description, action) in enumerate(steps, 1):
+            self.get_logger().info(f'Step {i}/{len(steps)}: {description}...')
+            if not action():
+                self.get_logger().error(f'Failed at step {i}: {description}')
+                return False
+            time.sleep(0.5)  # Brief pause between steps
 
         self.get_logger().info('=' * 50)
         self.get_logger().info('Pick and Place completed successfully!')
