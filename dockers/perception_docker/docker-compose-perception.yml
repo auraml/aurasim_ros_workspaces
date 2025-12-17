@@ -1,0 +1,22 @@
+services:
+  perception_scenario:
+    build:
+      context: ../..
+      dockerfile: dockers/perception_docker/Dockerfile
+      args:
+        PACKAGES: ${PACKAGES}
+    container_name: perception_scenario
+    network_mode: host
+    working_dir: /root/humble_ws
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - QT_QPA_PLATFORM=xcb
+      - XAUTHORITY=/tmp/.docker.xauth
+      - ROS_DISABLE_SHARED_MEMORY=1
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/root/.ros/fastdds.xml
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth
+    devices:
+      - /dev/dri:/dev/dri

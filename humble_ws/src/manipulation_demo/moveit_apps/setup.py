@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'pick_and_place = moveit_apps.pick_and_place:main'
+            'pick_and_place = moveit_apps.pick_and_place:main',
+            'pick_and_place_perception = moveit_apps.pick_and_place_perception:main'
         ],
     },
 )
