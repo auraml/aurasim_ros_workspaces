@@ -181,6 +181,15 @@ def generate_launch_description():
         arguments=["panda_hand_controller", "-c", "/controller_manager"],
     )
 
+    # Move to pose node - listens to /target_pose topic
+    move_to_pose_node = Node(
+        package="moveit_apps",
+        executable="move_to_pose",
+        name="move_to_pose_node",
+        output="screen",
+        parameters=[{"use_sim_time": LaunchConfiguration("use_sim_time")}],
+    )
+
     return LaunchDescription(
         [
             ros2_control_hardware_type,
@@ -194,5 +203,6 @@ def generate_launch_description():
             joint_state_broadcaster_spawner,
             panda_arm_controller_spawner,
             panda_hand_controller_spawner,
+            move_to_pose_node,
         ]
     )
